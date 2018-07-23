@@ -9,20 +9,34 @@ import (
 	"time"
 )
 
-func handleHttpRequest(w http.ResponseWriter, r *http.Request) {
-	client := http.Client{
-		Timeout: time.Duration(5 * time.Second),
+func handleHTTPRequest(w http.ResponseWriter, r *http.Request) {
+	pathInfo := getPathFromConfig(r.URL.Path)
+	log.Printf("%s %s %s %s -> %s", r.Proto, r.Method, r.RemoteAddr, r.URL, pathInfo.Handler)
+
+	switch pathInfo.Handler {
+	case "test":
+		handleHTTPRequestTest(w, r)
+		break
+	default:
+	case "proxy":
+		handleHTTPRequestReverseProxy(w, r)
+		break
 	}
+}
+
+func handleHTTPRequestTest(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(200)
+	w.Write([]byte("Hello"))
+}
+func handleHTTPRequestReverseProxy(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+
 	bodyIn, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		panic(err)
 	}
 
-	log.Printf("%s %s %s %s", r.Proto, r.Method, r.RemoteAddr, r.URL)
-
-	// handle POST/other verbs, please? FIXME
-	req, err := http.NewRequest(r.Method, "http://localhost"+r.URL.Path, bytes.NewBuffer(bodyIn))
+	req, err := http.NewRequest(r.Method, config.BaseProxyURL+r.URL.Path, bytes.NewBuffer(bodyIn))
 	if err != nil {
 		log.Println("ERROR: " + err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -42,10 +56,10 @@ func handleHttpRequest(w http.ResponseWriter, r *http.Request) {
 		log.Println("ERROR: " + err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	} else {
-		// MUST defer body close or we leak resources!
-		defer resp.Body.Close()
 	}
+
+	// MUST defer body close or we leak resources!
+	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -77,26 +91,4 @@ func handleHttpRequest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	w.Write([]byte(body))
 	log.Println("Time: " + fmt.Sprintf("%s", timeRan))
-}
-
-func handleHttpHandler(f http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s", r.RemoteAddr, r.URL)
-		f(w, r)
-	}
-}
-
-func main() {
-	srv := &http.Server{
-		Addr:           ":8080",
-		Handler:        handleHttpHandler(handleHttpRequest),
-		ReadTimeout:    30 * time.Second,
-		WriteTimeout:   10 * time.Second,
-		MaxHeaderBytes: 1 << 20, /* ??? FIXME */
-	}
-	srv.SetKeepAlivesEnabled(true)
-	log.Println("Starting server on port 8080")
-	if err := srv.ListenAndServe(); err != nil {
-		panic(err)
-	}
 }

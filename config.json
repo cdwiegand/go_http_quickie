@@ -1,0 +1,23 @@
+{
+  "ListenAddr": ":8080",
+  "ReadTimeout": 30,
+  "WriteTimeout": 10,
+  "ClientTimeout": 5,
+  "BaseProxyURL": "http://localhost",
+  "Paths": [
+    {
+      "Path": "/test",
+      "Handler": "test",
+      "InjectRequestHeaders": [
+        {
+          "X-Remote-Hello": "My Old Friend"
+        }
+      ],
+      "InjectResponseHeaders": [
+        {
+          "X-Hello": "Darkness"
+        }
+      ]
+    }
+  ]
+}
