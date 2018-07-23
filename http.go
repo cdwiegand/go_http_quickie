@@ -13,23 +13,28 @@ func handleHttpRequest(w http.ResponseWriter, r *http.Request) {
 	  Timeout: time.Duration(5 * time.Second),
   }
   start := time.Now()
-  log.Printf("%s %s", r.RemoteAddr, r.URL)
+  log.Printf("%s %s %s %s", r.Proto, r.Method, r.RemoteAddr, r.URL)
 
   // handle POST/other verbs, please? FIXME
-
-  req, err := http.NewRequest("GET", "http://localhost" + r.URL.Path, nil)
+  req, err := http.NewRequest(r.Method, "http://localhost" + r.URL.Path, nil)
   if err != nil {
     log.Println("ERROR: " + err.Error())
-	http.Error(w, err.Error(), http.StatusInternalServerError)
-	return
+  	http.Error(w, err.Error(), http.StatusInternalServerError)
+	  return
   }
 
-  // Add headers.... FIXME
+  // pass thru orig request headers to backend
+  for k, v := range r.Header {
+    for _, v2 := range v {
+      req.Header.Add(k, v2);
+      log.Printf(" <- %q: %q\n", k, v2)
+    }
+  }
 
-  resp, err := client.Do(req)
+  resp, err := client.Do(req) // once you pass this line you MUST defer a Body.Close()!
   if err != nil {
     log.Println("ERROR: " + err.Error())
-	http.Error(w, err.Error(), http.StatusInternalServerError)
+	  http.Error(w, err.Error(), http.StatusInternalServerError)
 	return
   } else {
     // MUST defer body close or we leak resources!
@@ -39,23 +44,23 @@ func handleHttpRequest(w http.ResponseWriter, r *http.Request) {
   body, err := ioutil.ReadAll(resp.Body)
   if err != nil {
     log.Println("ERROR: " + err.Error())
-	http.Error(w, err.Error(), http.StatusInternalServerError)
-	return
+    http.Error(w, err.Error(), http.StatusInternalServerError)
+	  return
   }
 
-  // get response headers and return... FIXME
+  // get response headers and return...
   for k, v := range resp.Header {
-	  w.Header().Set(k, v[0])
+	  w.Header().Set(k, v[0]);
+    log.Printf(" -> %q: %q\n", k, v)
   }
-  // now set some of our own...
+  // now set some of our own... these are SET as they replace any existing value
   w.Header().Set("X-Hello","Darkness, my old friend")
   if origin := r.Header.Get("Origin"); origin != "" {
-	w.Header().Set("Access-Control-Allow-Origin", origin)
+    w.Header().Set("Access-Control-Allow-Origin", origin)
   }
   w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
   w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token")
   w.Header().Set("Access-Control-Allow-Credentials", "true")
-  // w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
   timeRan := time.Since(start)
   w.Header().Set("X-Timing", fmt.Sprintf("%s",timeRan))
   w.Header().Set("X-Upstream-Proto", resp.Proto)
